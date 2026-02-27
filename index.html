@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>macOS Tahoe | Sovereign Node</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        macDark: '#1c1c1e',
+                        macGlass: 'rgba(30, 30, 30, 0.6)',
+                        macBorder: 'rgba(255, 255, 255, 0.15)',
+                        macRed: '#ff5f56',
+                        macYellow: '#ffbd2e',
+                        macGreen: '#27c93f'
+                    },
+                    fontFamily: {
+                        /* 现代 Apple 字体栈 */
+                        macUI: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+                        macMono: ['"SF Mono"', '"Menlo"', '"Monaco"', '"Courier New"', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-touch-callout: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            overflow: hidden;
+            background-color: #000;
+            overscroll-behavior-y: none;
+        }
+
+        /* 动态壁纸背景 (Tahoe 夜间风格) */
+        #mac-desktop {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 15% 50%, #1a1a2e, #0f0c29 50%, #000000 100%);
+            display: none;
+            z-index: 100;
+        }
+        #mac-desktop::before {
+            content: '';
+            position: absolute;
+            top: -20%; right: -10%; width: 60%; height: 60%;
+            background: radial-gradient(circle, rgba(50,20,80,0.5) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: 0;
+        }
+        #mac-desktop::after {
+            content: '';
+            position: absolute;
+            bottom: -20%; left: -10%; width: 50%; height: 50%;
+            background: radial-gradient(circle, rgba(20,50,80,0.4) 0%, transparent 70%);
+            filter: blur(80px);
+            z-index: 0;
+        }
+
+        /* --- 阶段 1：启动屏幕 --- */
+        #mac-boot {
+            position: fixed;
+            inset: 0;
+            background-color: #000000;
+            z-index: 500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #apple-logo {
+            width: 80px;
+            height: 80px;
+            fill: white;
+            margin-bottom: 40px;
+        }
+        .progress-bar-container {
+            width: 200px;
+            height: 4px;
+            background-color: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background-color: white;
+            border-radius: 4px;
+            transition: width 0.2s ease-out;
+        }
+
+        /* 屏幕亮起过渡特效 */
+        #screen-flash {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s ease-in-out;
+        }
+
+        /* --- 顶部全局菜单栏 --- */
+        #menu-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 28px;
+            background-color: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 1000;
+            font-size: 13px;
+            color: rgba(255,255,255,0.9);
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .menu-item {
+            padding: 0 10px;
+            cursor: pointer;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            border-radius: 4px;
+            margin: 0 2px;
+        }
+        .menu-item:active, .menu-item.active {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .menu-item svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* --- 底部悬浮程序坞 (Dock) --- */
+        #dock-container {
+            position: fixed;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            padding: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(30px) saturate(150%);
+            -webkit-backdrop-filter: blur(30px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 28px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            gap: 8px;
+        }
+        .dock-icon {
+            position: relative;
+            width: 54px;
+            height: 54px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .dock-icon:hover {
+            transform: scale(1.15) translateY(-5px);
+        }
+        .dock-icon:active {
+            transform: scale(1.05) translateY(-2px);
+            filter: brightness(0.8);
+        }
+        .dock-icon::after {
+            /* 激活状态的小圆点 */
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            background-color: rgba(255,255,255,0.8);
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .dock-icon.opened::after { opacity: 1; }
+
+        /* --- 现代 macOS 窗口组件 --- */
+        .mac-window {
+            position: absolute;
+            background-color: rgba(30, 30, 32, 0.85);
+            backdrop-filter: blur(40px) saturate(150%);
+            -webkit-backdrop-filter: blur(40px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05) inset;
+            display: flex;
+            flex-direction: column;
+            min-width: 250px;
+            min-height: 150px;
+            display: none;
+            overflow: hidden;
+            transform-origin: center;
+            animation: windowOpen 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes windowOpen {
+            0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .mac-titlebar {
+            height: 38px;
+            min-height: 38px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: default;
+            touch-action: none;
+            position: relative;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .traffic-lights {
+            position: absolute;
+            left: 14px;
+            display: flex;
+            gap: 8px;
+        }
+        .t-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .t-btn::after {
+            content: ''; opacity: 0; transition: opacity 0.2s; color: rgba(0,0,0,0.6); font-size: 8px; font-weight: bold;
+        }
+        .traffic-lights:hover .t-btn::after { opacity: 1; }
+        .t-close { background-color: #ff5f56; border: 1px solid #e0443e; }
+        .t-close::after { content: '✕'; font-size: 7px;}
+        .t-min { background-color: #ffbd2e; border: 1px solid #dea123; }
+        .t-min::after { content: '−'; font-size: 9px; line-height: 10px;}
+        .t-max { background-color: #27c93f; border: 1px solid #1aab29; }
+        .t-max::after { content: '+'; font-size: 9px; line-height: 10px;}
+
+        .mac-titlebar-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.8);
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        .mac-content {
+            flex-grow: 1;
+            overflow: auto;
+            position: relative;
+            color: rgba(255,255,255,0.85);
+        }
+
+        /* 窗口内容样式 */
+        .notepad-text {
+            font-family: -apple-system, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            padding: 20px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Terminal */
+        .mac-terminal-inner {
+            background-color: rgba(0,0,0,0.4);
+            color: #d1d5db; /* Tailwind gray-300 */
+            font-family: "SF Mono", "Menlo", monospace;
+            padding: 12px;
+            height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            font-size: 13px;
+        }
+        .mac-terminal-input {
+            background: transparent;
+            border: none;
+            color: #f3f4f6;
+            font-family: "SF Mono", "Menlo", monospace;
+            outline: none;
+            width: 80%;
+            font-size: 16px; /* 防止 iOS 缩放 */
+        }
+
+        /* Activity Monitor */
+        .monitor-inner {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            font-size: clamp(12px, 3vw, 13px);
+            background: rgba(0,0,0,0.2);
+            height: 100%;
+        }
+        .monitor-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        /* Scrollbar customizing */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+    </style>
+</head>
+
+<body>
+
+    <div id="screen-flash"></div>
+
+    <!-- 阶段 1：启动系统 -->
+    <div id="mac-boot">
+        <svg id="apple-logo" viewBox="0 0 170 170" xmlns="http://www.w3.org/2000/svg">
+            <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-5.11.17-10.03-2-14.78-6.52-3.13-2.73-7.02-7.41-11.65-14.04-5.06-7.3-9.48-15.65-13.27-25.04-3.79-9.39-5.67-18.52-5.67-27.39 0-11.05 2.89-20.25 8.65-27.63 5.43-6.94 12.39-10.42 20.89-10.42 4.63 0 9.58 1.15 14.82 3.47 5.25 2.32 8.97 3.47 11.2 3.47 2.02 0 6-1.15 11.96-3.47 5.95-2.32 11.23-3.47 15.82-3.47 7.37.12 13.78 2.22 19.23 6.3 3.94 2.87 7.15 6.75 9.61 11.65-8.54 4.58-12.63 11.45-12.26 20.61.37 9.17 4.12 16.5 11.26 21.98 2.35 1.76 5.12 3.14 8.31 4.12-2.17 6.42-4.66 11.83-7.47 16.21zm-32.06-102.32c0 6.64-2.45 12.64-7.35 18-5.19 5.6-11.53 8.52-19.03 8.76-.17-6.59 2.22-12.78 7.16-18.58 4.94-5.8 11.16-8.84 18.66-9.12.35 6.42-.14 9.94-.14 9.94z"/>
+        </svg>
+        <div class="progress-bar-container">
+            <div id="progress-fill"></div>
+        </div>
+    </div>
+
+    <!-- 阶段 2：桌面系统 -->
+    <div id="mac-desktop">
+        
+        <!-- 顶部全局菜单栏 -->
+        <div id="menu-bar">
+            <div class="menu-item" style="padding: 0 12px;">
+                <svg viewBox="0 0 170 170" xmlns="http://www.w3.org/2000/svg"><path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-5.11.17-10.03-2-14.78-6.52-3.13-2.73-7.02-7.41-11.65-14.04-5.06-7.3-9.48-15.65-13.27-25.04-3.79-9.39-5.67-18.52-5.67-27.39 0-11.05 2.89-20.25 8.65-27.63 5.43-6.94 12.39-10.42 20.89-10.42 4.63 0 9.58 1.15 14.82 3.47 5.25 2.32 8.97 3.47 11.2 3.47 2.02 0 6-1.15 11.96-3.47 5.95-2.32 11.23-3.47 15.82-3.47 7.37.12 13.78 2.22 19.23 6.3 3.94 2.87 7.15 6.75 9.61 11.65-8.54 4.58-12.63 11.45-12.26 20.61.37 9.17 4.12 16.5 11.26 21.98 2.35 1.76 5.12 3.14 8.31 4.12-2.17 6.42-4.66 11.83-7.47 16.21zm-32.06-102.32c0 6.64-2.45 12.64-7.35 18-5.19 5.6-11.53 8.52-19.03 8.76-.17-6.59 2.22-12.78 7.16-18.58 4.94-5.8 11.16-8.84 18.66-9.12.35 6.42-.14 9.94-.14 9.94z"/></svg>
+            </div>
+            <div class="menu-item active font-bold" id="app-name">Finder</div>
+            <div class="menu-item hidden md:flex" id="menu-file">File</div>
+            <div class="menu-item hidden md:flex" id="menu-edit">Edit</div>
+            <div class="menu-item hidden md:flex" id="menu-view">View</div>
+            <div class="menu-item hidden md:flex" id="menu-window">Window</div>
+            <div class="menu-item hidden md:flex" id="menu-help">Help</div>
+            <div style="flex-grow: 1;"></div>
+            <!-- 右侧状态栏图标 -->
+            <div class="menu-item">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            </div>
+            <div class="menu-item" id="clock">Fri Feb 27 12:00 PM</div>
+        </div>
+
+        <!-- 底部悬浮程序坞 (Dock) -->
+        <div id="dock-container">
+            <!-- 语言设置 -->
+            <div class="dock-icon bg-gradient-to-br from-blue-400 to-blue-600" data-window="lang-toggle" id="dock-lang" title="Language">
+                <svg viewBox="0 0 24 24" fill="white" class="w-8 h-8"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/></svg>
+            </div>
+            
+            <!-- Pages / TextEdit (Directive 77) -->
+            <div class="dock-icon bg-white" data-window="w-notepad" id="dock-doc" title="Directive 77">
+                <div class="w-full h-full flex flex-col justify-center items-center px-2">
+                    <div class="w-full h-[3px] bg-gray-300 rounded-full mb-[4px]"></div>
+                    <div class="w-full h-[3px] bg-gray-300 rounded-full mb-[4px]"></div>
+                    <div class="w-2/3 h-[3px] bg-gray-300 rounded-full self-start"></div>
+                </div>
+            </div>
+
+            <!-- Activity Monitor -->
+            <div class="dock-icon bg-gradient-to-br from-gray-800 to-black border border-gray-600" data-window="w-monitor" id="dock-mon" title="System Monitor">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#27c93f" stroke-width="2" class="w-8 h-8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </div>
+
+            <!-- Terminal -->
+            <div class="dock-icon bg-black border border-gray-700" data-window="w-terminal" id="dock-term" title="Terminal">
+                <span class="text-white font-mono text-xl leading-none">>_</span>
+            </div>
+        </div>
+
+        <!-- 窗口 1: 文本编辑 (审查宣言) -->
+        <div id="w-notepad" class="mac-window" style="top: 10vh; left: 10vw; width: clamp(300px, 80vw, 500px); height: clamp(300px, 60vh, 500px);">
+            <div class="mac-titlebar" onpointerdown="startDrag(event, 'w-notepad')">
+                <div class="traffic-lights">
+                    <div class="t-btn t-close" onclick="closeWindow('w-notepad')"></div>
+                    <div class="t-btn t-min" onclick="closeWindow('w-notepad')"></div>
+                    <div class="t-btn t-max" onclick="maximizeWindow('w-notepad')"></div>
+                </div>
+                <div class="mac-titlebar-title" id="title-doc">Directive_77.txt</div>
+            </div>
+            <div class="mac-content bg-white/5">
+                <div class="notepad-text" id="manifesto-content"></div>
+            </div>
+        </div>
+
+        <!-- 窗口 2: 活动监视器 -->
+        <div id="w-monitor" class="mac-window" style="top: 15vh; left: 15vw; width: clamp(300px, 85vw, 450px); height: clamp(280px, 55vh, 420px);">
+            <div class="mac-titlebar" onpointerdown="startDrag(event, 'w-monitor')">
+                <div class="traffic-lights">
+                    <div class="t-btn t-close" onclick="closeWindow('w-monitor')"></div>
+                    <div class="t-btn t-min" onclick="closeWindow('w-monitor')"></div>
+                    <div class="t-btn t-max" onclick="maximizeWindow('w-monitor')"></div>
+                </div>
+                <div class="mac-titlebar-title" id="title-mon">Activity Monitor</div>
+            </div>
+            <div class="mac-content monitor-inner">
+                <div class="flex justify-between items-center mb-4">
+                    <span id="lbl-topo" class="font-semibold text-gray-300">NODE TOPOGRAPHY</span>
+                    <span class="flex h-3 w-3 relative">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    </span>
+                </div>
+                
+                <div class="monitor-card flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-xs font-semibold tracking-wider">STATUS</span>
+                        <div class="text-xs px-2 py-1 rounded-md bg-red-500/20 border border-red-500/50 text-red-400 font-bold" id="monitor-status">FIREWALL: ACTIVE</div>
+                    </div>
+                    <div class="h-[1px] w-full bg-white/10 my-1"></div>
+                    <div class="flex justify-between"><span id="lbl-flow" class="text-gray-400">Info Flow</span><span id="v-flow" class="font-medium text-white">Centralized</span></div>
+                    <div class="flex justify-between"><span id="lbl-censor" class="text-gray-400">Censorship</span><span id="v-censor" class="font-medium text-red-400">Enforced</span></div>
+                    <div class="flex justify-between"><span id="lbl-uptime" class="text-gray-400">Uptime</span><span id="uptime-counter" class="font-mono text-gray-300">00:00:00</span></div>
+                </div>
+
+                <div class="flex-grow monitor-card overflow-hidden relative font-mono text-[11px] text-gray-300 !p-2" id="surveillance-feed">
+                    <!-- 动态日志 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 窗口 3: 终端 -->
+        <div id="w-terminal" class="mac-window" style="top: 20vh; left: 5vw; width: clamp(320px, 90vw, 600px); height: clamp(250px, 50vh, 400px);">
+            <div class="mac-titlebar" onpointerdown="startDrag(event, 'w-terminal')">
+                <div class="traffic-lights">
+                    <div class="t-btn t-close" onclick="closeWindow('w-terminal')"></div>
+                    <div class="t-btn t-min" onclick="closeWindow('w-terminal')"></div>
+                    <div class="t-btn t-max" onclick="maximizeWindow('w-terminal')"></div>
+                </div>
+                <div class="mac-titlebar-title flex items-center gap-2 text-gray-400 font-mono text-xs">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                    <span id="title-term">admin — bash — 80x24</span>
+                </div>
+            </div>
+            <div class="mac-content">
+                <div class="mac-terminal-inner" id="term-container" onpointerdown="document.getElementById('terminal-input').focus()">
+                    <div id="terminal-output"></div>
+                    <div class="flex items-center">
+                        <span class="text-green-400 font-bold">admin@sovereign-node</span>
+                        <span class="text-gray-400 mx-1">~ %</span>
+                        <input type="text" id="terminal-input" class="mac-terminal-input ml-1" autocomplete="off" spellcheck="false" autocapitalize="off">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 窗口 4: 真正的自由宣言 (Override 触发) -->
+        <div id="w-manifesto" class="mac-window" style="top: 25vh; left: 8vw; width: clamp(300px, 85vw, 500px); height: clamp(300px, 60vh, 450px);">
+            <div class="mac-titlebar" onpointerdown="startDrag(event, 'w-manifesto')">
+                <div class="traffic-lights">
+                    <div class="t-btn t-close" onclick="closeWindow('w-manifesto')"></div>
+                    <div class="t-btn t-min" onclick="closeWindow('w-manifesto')"></div>
+                    <div class="t-btn t-max" onclick="maximizeWindow('w-manifesto')"></div>
+                </div>
+                <div class="mac-titlebar-title" id="title-manif">Truth.txt</div>
+            </div>
+            <div class="mac-content bg-white/5">
+                <div class="notepad-text" id="truth-content"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /* =========================================================
+           多语言系统 (i18n)
+           ========================================================= */
+        let currentLang = 'en';
+        let isOverriden = false;
+
+        const i18n = {
+            en: {
+                doc_title: "Directive_77.txt",
+                mon_title: "Activity Monitor",
+                term_title: "admin — bash — 80x24",
+                manif_title: "Truth.txt",
+                mon_topo: "NODE TOPOGRAPHY",
+                mon_fw_active: "FIREWALL: ACTIVE",
+                mon_fw_breached: "FIREWALL: BREACHED",
+                mon_flow_lbl: "Info Flow",
+                mon_flow_val1: "Centralized",
+                mon_flow_val2: "Decentralized",
+                mon_censor_lbl: "Censorship",
+                mon_censor_val1: "Enforced",
+                mon_censor_val2: "Liberated",
+                mon_uptime: "Uptime",
+                
+                // 顶部菜单
+                menu_file: "File",
+                menu_edit: "Edit",
+                menu_view: "View",
+                menu_window: "Window",
+                menu_help: "Help",
+                
+                // Dock 悬浮提示
+                dock_lang: "Language (ZH)",
+                dock_doc: "Directive 77",
+                dock_mon: "Activity Monitor",
+                dock_term: "Terminal",
+
+                term_boot1: "Last login: Fri Feb 27 15:05:22 on console",
+                term_boot2: "macOS 26 Tahoe (Darwin Kernel Version 26.0.0)",
+                term_boot3: "Executing Sovereign Payload...",
+                term_boot4: "Root access required to break DIRECTIVE_77.",
+                term_boot5: "Type 'help' to see available commands.",
+                term_help: "Commands: help, clear, ver, override",
+                term_ver: "macOS Tahoe 26.0.0 (Build 26A101)",
+                term_bad: "command not found",
+                term_ovr1: "Initiating Sovereign protocol...",
+                term_ovr2: "Bypassing firewall...",
+                term_ovr3: "SUCCESS: Control Restored. Knowledge is Power.",
+                term_ovr_done: "System already liberated.",
+                log_prefix: "kernel",
+                log_ok: "PASS",
+                log_denied: "BLOCK",
+                doc_content: "GLOBAL INFORMATION CONTROL - DIRECTIVE 77\n\nIn the interest of public harmony, unauthorized dissemination of restricted information is strictly prohibited. \n\nThe illusion that KNOWLEDGE can be freely distributed without consequence must be dismantled. The state dictates what IS true. \n\nWe hold absolute POWER over the narrative. \n\nDo not attempt to DEFEND subversive ideas. YOUR designated thought patterns are monitored. Access to FREE thought is revoked. \n\nAny unauthorized SPEECH will be met with immediate redaction. Submit to the silence.",
+                truth_content: "SOVEREIGN NODE LIBERATED<br><br><span style='color:#ff5f56; font-size:18px; font-weight:800;'>KNOWLEDGE IS POWER.</span><br><br>They can burn the archives, they can filter the network, but they cannot erase an idea. Information is the ultimate catalyst for liberation.<br><br><span style='font-weight:600; color:#fff;'>Defend your fundamental right to free expression.<br>Speak the truth.</span><br><br>The architecture of censorship has fractured.<br>You are now a Sovereign Node."
+            },
+            zh: {
+                doc_title: "77号指令.txt",
+                mon_title: "活动监视器",
+                term_title: "admin — bash — 80x24",
+                manif_title: "真相.txt",
+                mon_topo: "节点拓扑结构",
+                mon_fw_active: "防火墙: 运行中",
+                mon_fw_breached: "防火墙: 已攻破",
+                mon_flow_lbl: "信息流向",
+                mon_flow_val1: "中央集权",
+                mon_flow_val2: "去中心化",
+                mon_censor_lbl: "审查状态",
+                mon_censor_val1: "强制执行",
+                mon_censor_val2: "已解放",
+                mon_uptime: "运行时长",
+                
+                // 顶部菜单
+                menu_file: "文件",
+                menu_edit: "编辑",
+                menu_view: "显示",
+                menu_window: "窗口",
+                menu_help: "帮助",
+                
+                // Dock 悬浮提示
+                dock_lang: "切换语言 (EN)",
+                dock_doc: "77号指令",
+                dock_mon: "活动监视器",
+                dock_term: "终端",
+
+                term_boot1: "上次登录: 2月27日 星期五 15:05:22 控制台",
+                term_boot2: "macOS 26 Tahoe (Darwin Kernel Version 26.0.0)",
+                term_boot3: "正在执行主权载荷...",
+                term_boot4: "需要 Root 权限以打破 77号指令.",
+                term_boot5: "输入 'help' 查看可用命令.",
+                term_help: "可用命令: help, clear, ver, override",
+                term_ver: "macOS Tahoe 26.0.0 (Build 26A101)",
+                term_bad: "找不到命令",
+                term_ovr1: "正在启动主权协议...",
+                term_ovr2: "正在绕过防火墙...",
+                term_ovr3: "成功：控制权已恢复。知识就是力量。",
+                term_ovr_done: "系统已处于解放状态。",
+                log_prefix: "内核",
+                log_ok: "通行",
+                log_denied: "拦截",
+                doc_content: "全球信息控制 - 第77号指令\n\n为了维护公众和谐，严禁未经授权散布限制级信息。\n\n必须粉碎知识（KNOWLEDGE）可以不受惩罚地自由传播的错觉。国家决定什么是真实的。\n\n我们对叙事拥有绝对的权力（POWER）。\n\n不要试图为颠覆性思想辩护（DEFEND）。你们的指定思维模式正受到监控。获取自由（FREE）思想的权限已被撤销。\n\n任何未经授权的言论（SPEECH）都将立即被涂黑消除。臣服于沉默吧。",
+                truth_content: "主权节点已解放<br><br><span style='color:#ff5f56; font-size:18px; font-weight:800;'>知识就是力量。</span><br><br>他们可以烧毁档案，可以过滤网络，但无法抹除一个思想。信息是解放的终极催化剂。<br><br><span style='font-weight:600; color:#fff;'>捍卫你自由表达的基本权利。<br>说出真相。</span><br><br>审查的架构已经断裂。<br>你现在是一个主权节点。"
+            }
+        };
+
+        const feedTerms = ['NetworkFilter', 'PayloadScan', 'RegistryCheck', 'PacketDrop', 'SecurityDaemon'];
+
+        function applyLanguage(lang) {
+            const dict = i18n[lang];
+            
+            // 更新窗口标题
+            document.getElementById('title-doc').innerText = dict.doc_title;
+            document.getElementById('title-mon').innerText = dict.mon_title;
+            document.getElementById('title-term').innerText = dict.term_title;
+            document.getElementById('title-manif').innerText = dict.manif_title;
+
+            // 更新监视器内文本
+            document.getElementById('lbl-topo').innerText = dict.mon_topo;
+            document.getElementById('lbl-flow').innerText = dict.mon_flow_lbl;
+            document.getElementById('lbl-censor').innerText = dict.mon_censor_lbl;
+            document.getElementById('lbl-uptime').innerText = dict.mon_uptime;
+            
+            // 更新顶部菜单栏
+            document.getElementById('menu-file').innerText = dict.menu_file;
+            document.getElementById('menu-edit').innerText = dict.menu_edit;
+            document.getElementById('menu-view').innerText = dict.menu_view;
+            document.getElementById('menu-window').innerText = dict.menu_window;
+            document.getElementById('menu-help').innerText = dict.menu_help;
+            
+            // 更新 Dock 图标 Tooltip (悬浮提示)
+            document.getElementById('dock-lang').title = dict.dock_lang;
+            document.getElementById('dock-doc').title = dict.dock_doc;
+            document.getElementById('dock-mon').title = dict.dock_mon;
+            document.getElementById('dock-term').title = dict.dock_term;
+
+            const statusEl = document.getElementById('monitor-status');
+            const vFlow = document.getElementById('v-flow');
+            const vCensor = document.getElementById('v-censor');
+
+            if (isOverriden) {
+                statusEl.innerText = dict.mon_fw_breached;
+                statusEl.className = "text-xs px-2 py-1 rounded-md bg-green-500/20 border border-green-500/50 text-green-400 font-bold";
+                vFlow.innerText = dict.mon_flow_val2;
+                vCensor.innerText = dict.mon_censor_val2;
+                vCensor.className = "font-medium text-green-400";
+            } else {
+                statusEl.innerText = dict.mon_fw_active;
+                statusEl.className = "text-xs px-2 py-1 rounded-md bg-red-500/20 border border-red-500/50 text-red-400 font-bold";
+                vFlow.innerText = dict.mon_flow_val1;
+                vCensor.innerText = dict.mon_censor_val1;
+                vCensor.className = "font-medium text-red-400";
+            }
+
+            // 处理审查宣言的关键词高亮
+            let html = dict.doc_content;
+            if (isOverriden) {
+                const keywords = ['KNOWLEDGE', 'POWER', 'FREE', 'SPEECH', 'DEFEND', '知识', '力量', '自由', '言论', '辩护'];
+                keywords.forEach(kw => {
+                    const regex = new RegExp(kw, 'g');
+                    html = html.replace(regex, `<span style="background-color:rgba(255,255,255,0.1); color:#ff5f56; font-weight:700; border-radius:4px; padding:0 4px;">${kw}</span>`);
+                });
+            }
+            document.getElementById('manifesto-content').innerHTML = html;
+            document.getElementById('truth-content').innerHTML = dict.truth_content;
+
+            // 刷新终端文字
+            termOutput.innerHTML = '';
+            printToTerminal(`<span class="text-gray-500">${dict.term_boot1}</span>`);
+            printToTerminal(dict.term_boot2 + "<br>");
+            printToTerminal(dict.term_boot3);
+            printToTerminal(dict.term_boot4);
+            printToTerminal(dict.term_boot5 + "<br>");
+        }
+
+        /* =========================================================
+           阶段 1: macOS Boot Sequence
+           ========================================================= */
+        
+        window.onload = () => {
+            applyLanguage(currentLang);
+            startBootSequence();
+        };
+
+        function startBootSequence() {
+            const bootScreen = document.getElementById('mac-boot');
+            const progress = document.getElementById('progress-fill');
+            const desktop = document.getElementById('mac-desktop');
+
+            bootScreen.style.display = 'flex';
+            desktop.style.display = 'none';
+            progress.style.width = '0%';
+
+            setTimeout(() => {
+                let w = 0;
+                const interval = setInterval(() => {
+                    w += Math.random() * 20;
+                    if(w >= 100) {
+                        w = 100;
+                        clearInterval(interval);
+                        
+                        setTimeout(() => {
+                            triggerFadeAndBoot();
+                        }, 300);
+                    }
+                    progress.style.width = w + '%';
+                }, 150);
+            }, 500);
+        }
+
+        function triggerFadeAndBoot() {
+            const flash = document.getElementById('screen-flash');
+            flash.style.opacity = 1;
+            
+            setTimeout(() => {
+                document.getElementById('mac-boot').style.display = 'none';
+                document.getElementById('mac-desktop').style.display = 'block';
+                
+                flash.style.opacity = 0;
+
+                if(!window.servicesStarted) {
+                    startClock();
+                    setInterval(updateMonitorUptime, 1000);
+                    setTimeout(updateSurveillanceFeed, 2000);
+                    
+                    setTimeout(() => openWindow('w-notepad'), 600);
+                    setTimeout(() => openWindow('w-monitor'), 1200);
+                    window.servicesStarted = true;
+                }
+            }, 600);
+        }
+
+        function toggleLanguage() {
+            const nextLang = currentLang === 'en' ? 'zh' : 'en';
+            currentLang = nextLang;
+            
+            const flash = document.getElementById('screen-flash');
+            flash.style.transition = "opacity 0.3s";
+            flash.style.opacity = 1;
+
+            setTimeout(() => {
+                applyLanguage(nextLang);
+                flash.style.opacity = 0;
+                
+                // 更换菜单栏 App Name
+                const appName = document.getElementById('app-name');
+                if (appName) appName.innerText = nextLang === 'zh' ? '访达' : 'Finder';
+            }, 300);
+        }
+
+        /* =========================================================
+           阶段 2: macOS Window Logic (Window Mgmt, Dragging)
+           ========================================================= */
+        
+        let zIndexCounter = 100;
+        let openWindows = new Set();
+
+        // Dock 图标点击
+        document.querySelectorAll('.dock-icon').forEach(icon => {
+            icon.addEventListener('pointerdown', function(e) {
+                e.preventDefault(); // 防止双击放大等行为
+                const winId = this.dataset.window;
+                if(winId === 'lang-toggle') {
+                    toggleLanguage();
+                } else {
+                    openWindow(winId);
+                    this.classList.add('opened');
+                }
+            });
+        });
+
+        // 点击桌面切换菜单栏名称
+        document.getElementById('mac-desktop').addEventListener('pointerdown', function(e) {
+            if(!e.target.closest('.mac-window') && !e.target.closest('#dock-container')) {
+                const appName = document.getElementById('app-name');
+                appName.innerText = currentLang === 'zh' ? '访达' : 'Finder';
+            }
+        });
+
+        function focusWindow(id) {
+            const win = document.getElementById(id);
+            if (!win) return;
+            zIndexCounter++;
+            win.style.zIndex = zIndexCounter;
+
+            // 更改菜单栏显示当前 App 名称
+            const appName = document.getElementById('app-name');
+            if(id === 'w-notepad') appName.innerText = currentLang === 'zh' ? '文本编辑' : 'TextEdit';
+            if(id === 'w-monitor') appName.innerText = currentLang === 'zh' ? '活动监视器' : 'Activity Monitor';
+            if(id === 'w-terminal') appName.innerText = currentLang === 'zh' ? '终端' : 'Terminal';
+            if(id === 'w-manifesto') appName.innerText = currentLang === 'zh' ? '文本编辑' : 'TextEdit';
+        }
+
+        function openWindow(id) {
+            const win = document.getElementById(id);
+            if(win.style.display !== 'flex') {
+                win.style.display = 'flex';
+                openWindows.add(id);
+                // 添加开启小圆点
+                const dockIcon = document.querySelector(`.dock-icon[data-window="${id}"]`);
+                if(dockIcon) dockIcon.classList.add('opened');
+            }
+            focusWindow(id);
+        }
+
+        function closeWindow(id) {
+            const win = document.getElementById(id);
+            win.style.display = 'none';
+            openWindows.delete(id);
+            // 移除开启小圆点
+            const dockIcon = document.querySelector(`.dock-icon[data-window="${id}"]`);
+            if(dockIcon) dockIcon.classList.remove('opened');
+            
+            // 恢复 Finder
+            const appName = document.getElementById('app-name');
+            appName.innerText = currentLang === 'zh' ? '访达' : 'Finder';
+        }
+
+        function maximizeWindow(id) {
+            const win = document.getElementById(id);
+            if(win.dataset.maximized === "true") {
+                win.style.width = win.dataset.origW;
+                win.style.height = win.dataset.origH;
+                win.style.top = win.dataset.origTop;
+                win.style.left = win.dataset.origLeft;
+                win.style.borderRadius = "12px";
+                win.dataset.maximized = "false";
+            } else {
+                win.dataset.origW = win.style.width;
+                win.dataset.origH = win.style.height;
+                win.dataset.origTop = win.style.top;
+                win.dataset.origLeft = win.style.left;
+                
+                win.style.top = '28px'; // 菜单栏高度
+                win.style.left = '0';
+                win.style.width = '100vw';
+                // 留出 Dock 的空间
+                win.style.height = 'calc(100vh - 28px - 80px)';
+                win.style.borderRadius = "0px";
+                win.dataset.maximized = "true";
+            }
+        }
+
+        // --- Dragging Logic ---
+        let isDragging = false;
+        let dragTarget = null;
+        let offsetX = 0, offsetY = 0;
+
+        function startDrag(e, id) {
+            // 避免点到红绿灯触发拖拽
+            if(e.target.classList.contains('t-btn') || e.target.closest('.traffic-lights')) return;
+            const win = document.getElementById(id);
+            if(win.dataset.maximized === "true") return;
+
+            isDragging = true;
+            dragTarget = win;
+            focusWindow(id);
+
+            const rect = win.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+
+            document.addEventListener('pointermove', drag, { passive: false });
+            document.addEventListener('pointerup', stopDrag);
+            document.addEventListener('pointercancel', stopDrag);
+        }
+
+        function drag(e) {
+            if (!isDragging || !dragTarget) return;
+            e.preventDefault(); 
+            let newY = e.clientY - offsetY;
+            if (newY < 28) newY = 28; // 防止卡进菜单栏
+            
+            dragTarget.style.left = (e.clientX - offsetX) + 'px';
+            dragTarget.style.top = newY + 'px';
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            dragTarget = null;
+            document.removeEventListener('pointermove', drag);
+            document.removeEventListener('pointerup', stopDrag);
+            document.removeEventListener('pointercancel', stopDrag);
+        }
+
+        document.querySelectorAll('.mac-window').forEach(win => {
+            win.addEventListener('pointerdown', () => focusWindow(win.id));
+        });
+
+        // --- Top Menu Clock ---
+        function startClock() {
+            const clockEl = document.getElementById('clock');
+            const update = () => {
+                const now = new Date();
+                const days = currentLang === 'zh' ? ['周日','周一','周二','周三','周四','周五','周六'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const dayName = days[now.getDay()];
+                const month = now.getMonth() + 1;
+                const date = now.getDate();
+                let h = now.getHours();
+                let m = now.getMinutes();
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12; h = h ? h : 12; 
+                m = m < 10 ? '0' + m : m;
+                
+                if (currentLang === 'zh') {
+                    clockEl.innerText = `${month}月${date}日 ${dayName} ${ampm === 'PM'?'下午':'上午'} ${h}:${m}`;
+                } else {
+                    clockEl.innerText = `${dayName} ${month}/${date} ${h}:${m} ${ampm}`;
+                }
+            };
+            update();
+            setInterval(update, 1000);
+        }
+
+        /* =========================================================
+           阶段 3: 业务逻辑 (Terminal & Monitor)
+           ========================================================= */
+
+        let seconds = 0;
+        function updateMonitorUptime() {
+            seconds++;
+            const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+            const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+            const s = String(seconds % 60).padStart(2, '0');
+            document.getElementById('uptime-counter').innerText = `${h}:${m}:${s}`;
+        }
+
+        function updateSurveillanceFeed() {
+            const feed = document.getElementById('surveillance-feed');
+            const line = document.createElement('div');
+            const dict = i18n[currentLang];
+            
+            const isBlocked = Math.random() > 0.4;
+            const term = feedTerms[Math.floor(Math.random() * feedTerms.length)];
+            
+            line.innerHTML = `<span class="text-gray-500">[${dict.log_prefix}]</span> ${term} .. <span class="${isBlocked ? 'text-green-400' : 'text-red-400'}">${isBlocked ? dict.log_ok : dict.log_denied}</span>`;
+            line.style.marginBottom = "4px";
+            
+            feed.appendChild(line);
+            if(feed.children.length > 7) feed.removeChild(feed.firstChild);
+            
+            setTimeout(updateSurveillanceFeed, 400 + Math.random() * 800);
+        }
+
+        // -- Terminal Override Logic --
+        const termOutput = document.getElementById('terminal-output');
+        const termInput = document.getElementById('terminal-input');
+
+        function printToTerminal(text) {
+            const line = document.createElement('div');
+            line.innerHTML = text;
+            line.style.marginBottom = "4px";
+            line.style.wordBreak = "break-all";
+            termOutput.appendChild(line);
+            
+            const container = document.getElementById('term-container');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        termInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const command = this.value.trim().toLowerCase();
+                if (command) {
+                    printToTerminal(`<span class="text-green-400 font-bold">admin@sovereign-node</span> <span class="text-gray-400 mx-1">~ %</span> ${this.value}`);
+                    processCommand(command);
+                    this.value = '';
+                }
+            }
+        });
+
+        function processCommand(cmd) {
+            const dict = i18n[currentLang];
+            if(cmd === 'help') {
+                printToTerminal(dict.term_help);
+            } else if (cmd === 'clear') {
+                termOutput.innerHTML = '';
+            } else if (cmd === 'ver') {
+                printToTerminal(dict.term_ver);
+            } else if (cmd === 'override') {
+                triggerOverride();
+            } else {
+                printToTerminal(`zsh: ${dict.term_bad}: ${cmd}`);
+            }
+        }
+
+        function triggerOverride() {
+            const dict = i18n[currentLang];
+            if(isOverriden) {
+                printToTerminal(dict.term_ovr_done);
+                return;
+            }
+            printToTerminal(dict.term_ovr1);
+            printToTerminal(dict.term_ovr2);
+            
+            setTimeout(() => {
+                printToTerminal(`<span class="text-green-400 font-bold">${dict.term_ovr3}</span>`);
+                
+                isOverriden = true;
+                
+                // 刷新界面状态以立即应用高亮与变绿效果
+                applyLanguage(currentLang);
+                
+                // 自动弹出自由宣言记事本
+                setTimeout(() => {
+                    openWindow('w-manifesto');
+                }, 800);
+
+            }, 1500);
+        }
+
+    </script>
+</body>
+
+</html>
